@@ -1,142 +1,274 @@
-🧬 A Multilayer Classification Framework for Skin Disease Detection on SkinBench (v2)
+SkinBench-v2: Multilayer Skin Disease Classification (ALL-9 + L1/L2 + Subclass L3)
 
-SkinBench-v2 delivers a three-level (multilayer) classification pipeline for skin disease recognition:
+TL;DR A production-ready, reproducible pipeline for skin-disease image classification with a multilayer router: L1 (Normal vs Abnormal) → L2 (8 abnormal classes) → optional L3 (Subclass) under Eczema / Fungal / Pox. Models compared: ResNet50, DenseNet121, MobileNetV3, CNN baseline, ViT-ResNet hybrid, Swin-DenseNet hybrid, EfficientNet, VGG16, VGG19.
 
-L1 (Binary): Normal vs. Disease
+Project Structure (as used in this repo) SkinBench/ ├─ data_raw/ │ ├─ train/ ├─ val/ └─ test/ │ │ ├─ Acne/ ├─ Bacterial Infections/ ├─ Eczema/ │ │ ├─ Fungal Infections/ ├─ Normal/ ├─ Pigmentation Disorders/ │ │ ├─ Pox/ ├─ Psoriasis/ └─ Scabies/ ├─ models/ # model definitions (cnn, resnet, densenet, vgg, efficientnet, vit_resnet, swin_densenet, etc.) ├─ eval_tools/ # evaluation scripts (run_all_evals, ROC/PR, reliability, CM, McNemar, etc.) ├─ runs/ │ ├─ L1/ # L1 (Normal vs Abnormal) checkpoints & outputs │ │ ├─ resnet50/best.pt │ │ └─ ... │ ├─ L2/ # L2 (8-class abnormal) checkpoints & outputs │ │ ├─ resnet50/best.pt │ │ ├─ densenet121/best.pt │ │ └─ ... │ ├─ ALL9/ # single-stage 9-class experiments │ │ ├─ cnn/best.pt │ │ ├─ mobilenetv3/best.pt │ │ ├─ vit_resnet/best.pt │ │ ├─ swin_densenet/best.pt │ │ ├─ efficientnet/best.pt │ │ ├─ vgg16/best.pt │ │ ├─ vgg19/best.pt │ │ └─ ... │ ├─ SUBCLASS/ │ │ └─ subclass/best.pt # optional L3 subclass head (Eczema/Fungal/Pox subtypes) │ ├─ figures/ # all plots auto-saved here │ └─ tables/ # all CSV outputs here (predictions, confusion, leaderboard, comparison) ├─ train_multilayer.py ├─ datasets.py ├─ app.py # Streamlit app (L1 + L2 + optional L3) └─ README.md
 
-L2 (Coarse multi-class): 8 disease super-classes
+Data Assumptions
 
-ALL9 (Fine multi-class): 9 classes (Normal + 8 diseases)
+Directory name must be data_raw with train/, val/, test/ splits.
 
-The repo includes trained evaluation utilities, figures (confusion matrices, ROC/PR curves, reliability diagrams), and tabular outputs. This branch documents reproducible evaluation and a Streamlit demo using the best models you trained.
+ALL-9 classes (folder names): Acne, Bacterial Infections, Eczema, Fungal Infections, Normal, Pigmentation Disorders, Pox, Psoriasis, Scabies
 
-📂 Repository Structure (v2) SkinBench/ ├─ data_raw/ # train/val/test//* ├─ eval_tools/ │ ├─ run_all_evals.py # unified evaluation entrypoint │ ├─ roc_pr_curves.py # plotting ROC & PR │ └─ ... ├─ models/ # model definitions (resnet50, densenet121, ...) ├─ runs/ │ ├─ ALL9/ # fine 9-class results │ ├─ L1/ # binary results │ ├─ L2/ # 8-class results │ ├─ SUBCLASS/ # (optional) subclass heads │ ├─ figures/ # 🔎 all plots live here (GitHub auto-renders) │ └─ tables/ # 📊 all CSVs (confusions, predictions, comparison) ├─ app.py # Streamlit demo ├─ README.md # this file └─ .gitignore # ignore checkpoints & raw data
+Multilayer Method
+L1 (binary): Normal vs Abnormal
 
-Important: Only relative paths are used below (e.g., runs/figures/confusion_ALL9_vit_resnet.png). Once you push to GitHub on v2, the images and tables render automatically.
+Trained with --phase L1 (e.g., ResNet50 best)
 
-🧪 Dataset Layout
+L2 (8 classes): for Abnormal images only
 
-Place your dataset under data_raw/ with the standard ImageFolder layout:
+Classes: Acne, Bacterial Infections, Eczema, Fungal Infections, Pigmentation Disorders, Pox, Psoriasis, Scabies
 
-data_raw/ ├─ train/ │ ├─ Acne/ Bacterial Infections/ Eczema/ Fungal Infections/ Normal/ │ ├─ Pigmentation Disorders/ Pox/ Psoriasis/ Scabies/ ├─ val/ │ └─ (same 9 subfolders) └─ test/ └─ (same 9 subfolders)
+Trained with --phase L2 (e.g., DenseNet121 / ResNet50 best)
 
-🖥️ Environment
+Optional L3 (Subclass): when L2 predicts Eczema or Fungal Infections or Pox, an extra head refines sub-classes.
 
-(conda recommended)
-conda create -n torch_gpu python=3.10 -y conda activate torch_gpu pip install -r requirements.txt # create if not present; include torch/torchvision, scikit-learn, matplotlib, pandas, streamlit, etc.
+Trained with --phase SUBCLASS and your subclass labels inside datasets.py (see comments in the file).
 
-🚀 Training (step-by-step)
+Inference path in app.py: L1 → L2 → if {Eczema/Fungal/Pox} → L3.
 
-You already have trained checkpoints under runs///best.pt. If you want to retrain, run your project’s training entrypoint per phase/model (adapt the command to your script names):
+Environment conda create -n torch_gpu python=3.10 -y
+conda activate torch_gpu
 
-Example commands (adapt to your train script/args):
-ALL9 (9-class)
-python -m models.train --phase ALL9 --model mobilenetv3 --data_dir data_raw --epochs 50 --out runs/ALL9/mobilenetv3
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
-python -m models.train --phase ALL9 --model vit_resnet --data_dir data_raw --epochs 50 --out runs/ALL9/vit_resnet
+pip install timm==0.9.16 scikit-learn==1.4.2 matplotlib==3.8.4 seaborn==0.13.2 pandas==2.2.2
 
-python -m models.train --phase ALL9 --model swin_densenet --data_dir data_raw --epochs 50 --out runs/ALL9/swin_densenet
+pip install streamlit==1.37.0
 
-python -m models.train --phase ALL9 --model efficientnet --data_dir data_raw --epochs 50 --out runs/ALL9/efficientnet
+Training L1 (Normal vs Abnormal)
+python train_multilayer.py --data_dir data_raw --phase L1 --model resnet50
 
-python -m models.train --phase ALL9 --model vgg16 --data_dir data_raw --epochs 50 --out runs/ALL9/vgg16
+checkpoints → runs/L1/resnet50/best.pt
+L2 (8-class abnormal)
 
-python -m models.train --phase ALL9 --model vgg19 --data_dir data_raw --epochs 50 --out runs/ALL9/vgg19
+python train_multilayer.py --data_dir data_raw --phase L2 --model densenet121
 
-(cnn baseline likewise)
-L1 (binary: Normal vs Disease)
-python -m models.train --phase L1 --model resnet50 --data_dir data_raw --epochs 30 --out runs/L1/resnet50
+checkpoints → runs/L2/densenet121/best.pt
+ALL-9 (single-stage baseline & comparisons)
 
-L2 (8-class diseases only)
-python -m models.train --phase L2 --model resnet50 --data_dir data_raw --epochs 40 --out runs/L2/resnet50
+pick any:
+python train_multilayer.py --data_dir data_raw --phase ALL9 --model mobilenetv3
 
-python -m models.train --phase L2 --model densenet121 --data_dir data_raw --epochs 40 --out runs/L2/densenet121
+python train_multilayer.py --data_dir data_raw --phase ALL9 --model vit_resnet
 
-Tip: Keep checkpoint filenames as runs///best.pt so the evaluator auto-discovers them.
+python train_multilayer.py --data_dir data_raw --phase ALL9 --model swin_densenet
 
-📈 Reproducible Evaluation
+python train_multilayer.py --data_dir data_raw --phase ALL9 --model efficientnet
 
-Run everything at once python -m eval_tools.run_all_evals --data_dir data_raw --phases ALL9 L1 L2 --models resnet50 densenet121 mobilenetv3 cnn vit_resnet swin_densenet efficientnet vgg16 vgg19
-Outputs:
+python train_multilayer.py --data_dir data_raw --phase ALL9 --model vgg16
 
-Figures → runs/figures/*.png
+python train_multilayer.py --data_dir data_raw --phase ALL9 --model vgg19
 
-Tables → runs/tables/*.csv
+python train_multilayer.py --data_dir data_raw --phase ALL9 --model cnn
 
-Comparison table → runs/tables/comparison_all_models.csv
+L3 (Subclass head)
 
-Notable notes
-Binary ROC/PR on L1: the evaluator expects multi-class probabilities for OVR plots; L1 uses binary heads. The script now skips OVR curves for L1 to avoid IndexError and uses binary ROC/PR instead.
+python train_multilayer.py --data_dir data_raw --phase SUBCLASS --model densenet121
 
-Your earlier issues with RoutedFolder were resolved by passing the correct constructor args; evaluator now builds loaders internally.
-
-🧪 Results (your reported metrics) ALL9 (9 classes) — Test set Model Accuracy Macro-F1 ViT-ResNet 0.9843 0.9836 Swin-DenseNet 0.9843 0.9839 EfficientNet 0.9833 0.9827 MobileNetV3 0.9815 0.9808 VGG16 0.9721 0.9713 VGG19 0.9667 0.9668 CNN baseline 0.6389 0.6220 ResNet50 (no ALL9 checkpoint) – DenseNet121 (no ALL9 checkpoint) –
-
-Key plots (auto-rendered on GitHub):
-
-Confusion matrices runs/figures/confusion_ALL9_vit_resnet.png runs/figures/confusion_ALL9_swin_densenet.png runs/figures/confusion_ALL9_efficientnet.png runs/figures/confusion_ALL9_mobilenetv3.png runs/figures/confusion_ALL9_vgg16.png runs/figures/confusion_ALL9_vgg19.png runs/figures/confusion_ALL9_cnn.png
-
-ROC (one-vs-rest): runs/figures/roc_ovr_ALL9_vit_resnet.png runs/figures/roc_ovr_ALL9_swin_densenet.png runs/figures/roc_ovr_ALL9_efficientnet.png runs/figures/roc_ovr_ALL9_mobilenetv3.png runs/figures/roc_ovr_ALL9_vgg16.png runs/figures/roc_ovr_ALL9_vgg19.png runs/figures/roc_ovr_ALL9_cnn.png
-
-PR (one-vs-rest): runs/figures/pr_ovr_ALL9_vit_resnet.png runs/figures/pr_ovr_ALL9_swin_densenet.png runs/figures/pr_ovr_ALL9_efficientnet.png runs/figures/pr_ovr_ALL9_mobilenetv3.png runs/figures/pr_ovr_ALL9_vgg16.png runs/figures/pr_ovr_ALL9_vgg19.png runs/figures/pr_ovr_ALL9_cnn.png
-
-Reliability diagrams: runs/figures/reliability_ALL9_vit_resnet.png runs/figures/reliability_ALL9_swin_densenet.png runs/figures/reliability_ALL9_efficientnet.png runs/figures/reliability_ALL9_mobilenetv3.png runs/figures/reliability_ALL9_vgg16.png runs/figures/reliability_ALL9_vgg19.png runs/figures/reliability_ALL9_cnn.png
-
-L1 (Binary: Normal vs Disease) — Test set Model Accuracy Macro-F1 ResNet50 0.9980 0.9959
-
-Plots: runs/figures/confusion_L1_resnet50.png runs/figures/roc_binary_L1_resnet50.png runs/figures/pr_binary_L1_resnet50.png runs/figures/reliability_L1_resnet50.png
-
-L2 (8 diseases) — Test set Model Accuracy Macro-F1 DenseNet121 0.9853 0.9849 ResNet50 0.9827 0.9824
-
-Plots: runs/figures/confusion_L2_densenet121.png runs/figures/confusion_L2_resnet50.png runs/figures/roc_ovr_L2_densenet121.png runs/figures/roc_ovr_L2_resnet50.png runs/figures/pr_ovr_L2_densenet121.png runs/figures/pr_ovr_L2_resnet50.png runs/figures/reliability_L2_densenet121.png runs/figures/reliability_L2_resnet50.png
-
-CSV artifacts (render on GitHub)
-
-Model comparison: runs/tables/comparison_all_models.csv
-
-Per-model confusion tables (CSV): runs/tables/confusion_ALL9_vit_resnet.csv, ..._swin_densenet.csv, ..._efficientnet.csv, ..._mobilenetv3.csv, ..._vgg16.csv, ..._vgg19.csv, ..._cnn.csv runs/tables/confusion_L1_resnet50.csv, runs/tables/confusion_L2_resnet50.csv, runs/tables/confusion_L2_densenet121.csv
-
-Predictions (CSV per model): runs/tables/pred_ALL9_vit_resnet.csv, ..._swin_densenet.csv, ..._efficientnet.csv, ..._mobilenetv3.csv, ..._vgg16.csv, ..._vgg19.csv, ..._cnn.csv runs/tables/pred_L1_resnet50.csv, runs/tables/pred_L2_resnet50.csv, runs/tables/pred_L2_densenet121.csv
-
-🌐 Streamlit Demo streamlit run app.py
-
-Features:
-
-Upload an image → L1 → L2 → ALL9 cascade prediction
-
-Uses your best checkpoints from runs///best.pt
-
-Supports subclass prediction hooks (optional SUBCLASS/ heads)
-
-If you see a Missing key(s) in state_dict error, it means the checkpoint was trained with a different head/backbone name. Re-export your model with the same class names and module keys used in models/*.py for inference.
-
-🔒 Keeping the repo clean (no heavy files)
-
-Add to .gitignore (already recommended):
-
-checkpoints
-runs//best.pt runs//best.pth runs//last.pt runs//last.pth runs//checkpoints/ models//best*.pt models/**/best*.pth
-
-raw data
-data_raw/
-
-python cache
-pycache/ *.pyc *.pyo
-
-If you accidentally committed large checkpoints:
-
-git rm --cached -r runs models git commit -m "remove tracked checkpoints" git push origin v2
-
-🧩 Reproducing exactly these plots
-
-All the images shown above are already produced under runs/figures/. To regenerate them after retraining, simply re-run:
+checkpoint → runs/SUBCLASS/subclass/best.pt
+NOTE: align subclass labels in datasets.py (Eczema/Fungal/Pox subtypes).
+Evaluation (auto-plots + CSVs)
+Run all evaluations and comparisons in one go:
 
 python -m eval_tools.run_all_evals --data_dir data_raw --phases ALL9 L1 L2 --models resnet50 densenet121 mobilenetv3 cnn vit_resnet swin_densenet efficientnet vgg16 vgg19
 
-📜 License
+outputs:
+runs/figures/*.png (confusion, ROC-OVR, PR-OVR, reliability)
+runs/tables/*.csv (predictions, confusion, leaderboard, comparison_all_models.csv)
+Streamlit Inference (with subclass)
+app.py loads:
 
-This repository is released under the MIT License. See LICENSE for details.
+L1: runs/L1/resnet50/best.pt
 
-🙌 Acknowledgements
+L2: runs/L2/densenet121/best.pt
 
-Thanks to all open-source authors of PyTorch, Torchvision, scikit-learn, Matplotlib, and the SkinBench dataset contributors. Your evaluation plots and tables (runs/figures, runs/tables) make the results fully auditable on GitHub.
+L3 (optional): runs/SUBCLASS/subclass/best.pt
+
+If your L3 checkpoint was trained with a slightly different architecture, set:
+
+STRICT_L3_LOAD = False
+
+inside app.py (already handled) to bypass minor key mismatches during weight load.
+
+Run:
+
+streamlit run app.py
+
+Results: Quick Leaderboard
+Full table: runs/tables/comparison_all_models.csv
+
+(Examples from your last eval run)
+
+Phase Model Acc Macro-F1 ALL9 ViT-ResNet 0.9843 0.9836 ALL9 Swin-DenseNet 0.9843 0.9839 ALL9 EfficientNet 0.9833 0.9827 ALL9 MobileNetV3 0.9815 0.9808 ALL9 VGG16 0.9721 0.9713 ALL9 VGG19 0.9667 0.9668 ALL9 CNN (baseline) 0.6389 0.6220 L1 ResNet50 0.9980 0.9959 L2 DenseNet121 0.9853 0.9849 L2 ResNet50 0.9827 0.9824
+
+L1+L2 cascade is used for the Streamlit deploy; L3 is triggered for Eczema/Fungal/Pox to predict subclasses.
+
+Plots (render automatically on GitHub)
+All image links use relative paths (no hardcoded localhost). After you push to v2, GitHub will display them inline.
+
+9.1 Confusion Matrices (ALL-9)
+
+CNN:
+
+EfficientNet:
+
+MobileNetV3:
+
+Swin-DenseNet:
+
+ViT-ResNet:
+
+VGG16:
+
+VGG19:
+
+9.2 Confusion Matrices (L1 / L2)
+
+L1-ResNet50:
+
+L2-ResNet50:
+
+L2-DenseNet121:
+
+9.3 ROC-OVR (ALL-9)
+
+CNN:
+
+EfficientNet:
+
+MobileNetV3:
+
+Swin-DenseNet:
+
+ViT-ResNet:
+
+VGG16:
+
+VGG19:
+
+9.4 PR-OVR (ALL-9)
+
+CNN:
+
+EfficientNet:
+
+MobileNetV3:
+
+Swin-DenseNet:
+
+ViT-ResNet:
+
+VGG16:
+
+VGG19:
+
+9.5 Reliability (ALL-9)
+
+CNN:
+
+EfficientNet:
+
+MobileNetV3:
+
+Swin-DenseNet:
+
+ViT-ResNet:
+
+VGG16:
+
+VGG19:
+
+9.6 Binary (L1) — ROC/PR/Reliability
+
+ROC:
+
+PR:
+
+Reliability:
+
+9.7 L2 (8-class) — ROC/PR/Reliability
+
+ResNet50 ROC:
+
+ResNet50 PR:
+
+ResNet50 Reliability:
+
+DenseNet121 ROC:
+
+DenseNet121 PR:
+
+DenseNet121 Reliability:
+
+CSV Outputs (auto-generated)
+Master comparison: runs/tables/comparison_all_models.csv
+
+Per-model predictions (ALL-9):
+
+pred_ALL9_cnn.csv
+
+pred_ALL9_mobilenetv3.csv
+
+pred_ALL9_vit_resnet.csv
+
+pred_ALL9_swin_densenet.csv
+
+pred_ALL9_efficientnet.csv
+
+pred_ALL9_vgg16.csv
+
+pred_ALL9_vgg19.csv
+
+Per-model confusions (ALL-9): similarly named confusion_ALL9_*.csv in runs/tables/
+
+L1/L2 predictions & confusions: pred_L1_resnet50.csv, confusion_L2_densenet121.csv, etc.
+
+All links are relative so they render in GitHub’s CSV viewer.
+
+Reproducibility Notes
+AMP is enabled automatically on CUDA (torch.amp.autocast('cuda')).
+
+Early stopping is active; best checkpoints saved to runs///best.pt.
+
+Seeds & splits are controlled in train_multilayer.py (see --seed).
+
+For VGG16 training, the classifier head is adapted to match the 224×224 spatial flatten (no shape mismatch).
+
+How Inference Works (app.py)
+L1 scores Normal vs Abnormal.
+
+If Normal → stop.
+
+If Abnormal → L2 predicts one of 8 classes.
+
+If L2 ∈ {Eczema, Fungal Infections, Pox} → L3 predicts subclass (optional).
+
+The app returns top-k with probabilities + explanation of route.
+
+To run:
+
+streamlit run app.py
+
+Push to your old repo under a new branch v2
+From the project root:
+
+if not yet a git repo
+git init git remote add origin # the SkinBench old repo
+
+create and switch to v2 branch
+git checkout -b v2
+
+keep large checkpoints out of git history (recommended)
+echo "runs/**/*.pt" >> .gitignore echo ".streamlit/" >> .gitignore echo "pycache/" >> .gitignore git add . git commit -m "SkinBench v2: multilayer pipeline + evaluations + Streamlit"
+
+push v2
+git push -u origin v2
+
+After the push, open your repo → switch to branch v2 → all the figures under runs/figures/ and CSVs under runs/tables/ will render automatically in GitHub.
+
+Citations & Inspiration
+(Place your paper citations here; your PDFs are in /papers locally. You can add a short BibTeX list.)
+
+License
+MIT (or your preferred license).
